@@ -1,4 +1,4 @@
-name: Web Application Security - Quiz Preview
+name: Web Application Security - Final Question
 on:
   push:
     branches: [certzaky-public-probe-20261123]
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Read five visible questions normally; do not submit assessment
+      - name: Review final question after four normal quiz selections
         run: |
           set -euo pipefail
           mkdir -p /tmp/issuer-browser && cd /tmp/issuer-browser
@@ -22,25 +22,25 @@ jobs:
             const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
             const page=await browser.newPage();
             try {
-              const resp=await page.goto('https://academy.cyberarmy.ai/quiz/web-application-security',{waitUntil:'domcontentloaded',timeout:25000});
-              if(resp.status()!==200)throw Error('Unexpected response '+resp.status());
+              await page.goto('https://academy.cyberarmy.ai/quiz/web-application-security',{waitUntil:'domcontentloaded',timeout:25000});
               await page.getByRole('button',{name:/Start quiz/i}).click();
-              const questions=[];
-              for(let i=1;i<=5;i++){
-                const info=await page.evaluate(()=>({
-                   body:document.body.innerText.slice(0,1250),
-                   options:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length&&/^[A-D]\n/.test(x.innerText)).map(x=>x.innerText.trim())
-                }));
-                if(!info.body.includes('Question '+i+' of 5')) throw Error('Unexpected question number '+i);
-                questions.push({number:i,...info});
-                if(i<5){
-                  await page.getByRole('button',{name:/^A\s+/}).first().click();
-                  await page.getByRole('button',{name:'Next'}).click();
-                }
-              }
-              console.log('WEBAPP_PREVIEW '+JSON.stringify(questions));
-              console.log('NOT_SUBMITTED '+questions.length);
+              await page.getByRole('button',{name:/Execute scripts in user browser/i}).click();
+              await page.getByRole('button',{name:'Next'}).click();
+              await page.waitForTimeout(450);
+              await page.getByRole('button',{name:/Direct object access without authorization/i}).click();
+              await page.getByRole('button',{name:'Next'}).click();
+              await page.waitForTimeout(450);
+              await page.getByRole('button',{name:/Improper input validation/i}).click();
+              await page.getByRole('button',{name:'Next'}).click();
+              await page.waitForTimeout(450);
+              await page.getByRole('button',{name:/User's authenticated session/i}).click();
+              await page.getByRole('button',{name:'Next'}).click();
+              await page.waitForTimeout(450);
+              console.log('FINAL_WEBAPP_QUESTION '+JSON.stringify(await page.evaluate(()=>({
+                  text:document.body.innerText.slice(0,1600),
+                  buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length&&/^[A-D]\n/.test(x.innerText)).map(x=>x.innerText.trim())
+              }))));
             } finally {await browser.close();}
-          })().catch(e=>{console.error('WEBAPP_ERROR '+e.stack);process.exitCode=1;});
+          })().catch(e=>{console.error('FINAL_WEBAPP_ERROR '+e.stack);process.exitCode=1;});
           JS
           node preview.cjs
