@@ -1,52 +1,34 @@
-name: Free Credential Issuer - AI Security Outcome
+name: Cyber Army - Archive Original PDF
 on:
   push:
     branches: [certzaky-public-probe-20261123]
     paths: ['.github/workflows/issuer-ui-check.yml']
 permissions:
-  contents: read
+  contents: write
 jobs:
-  quiz-outcome:
+  download-issued:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Take free Cyber Army awareness quiz using official interface; no bypass
+      - uses: actions/checkout@v4
+      - name: Download existing issuer-issued PDF and verify binary
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p /tmp/issuer-browser && cd /tmp/issuer-browser
-          npm init -y --silent >/dev/null
-          npm install --no-save --silent playwright-core@1.56.1
-          cat > inspect.cjs <<'JS'
-          const {chromium}=require('playwright-core');
-          (async()=>{
-            const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
-            const p=await b.newPage({acceptDownloads:true});
-            try{
-              await p.goto('https://academy.cyberarmy.ai/quiz/ai-security',{waitUntil:'domcontentloaded',timeout:25000});
-              await p.getByPlaceholder('e.g. Alex Morgan').fill(['Muhammad','Zaky','Asshidqy'].join(' '));
-              await p.getByRole('button',{name:'Student',exact:true}).click();
-              await p.getByRole('button',{name:/Start quiz/i}).click();
-              await p.getByRole('button',{name:/Crafting inputs that override a model/i}).click();
-              await p.getByRole('button',{name:'Next'}).click();
-              await p.getByRole('button',{name:/Corrupting the training data to manipulate/i}).click();
-              await p.getByRole('button',{name:'Next'}).click();
-              await p.getByRole('button',{name:/Extracting sensitive training data from a trained model/i}).click();
-              await p.getByRole('button',{name:'Next'}).click();
-              await p.getByRole('button',{name:/Small, often imperceptible changes/i}).click();
-              await p.getByRole('button',{name:'Next'}).click();
-              await p.getByRole('button',{name:/By implementing robust input validation/i}).click();
-              await p.getByRole('button',{name:'Submit Quiz'}).click();
-              await p.waitForTimeout(2200);
-              const result=await p.evaluate(()=>({
-                title:document.title,
-                url:location.href,
-                text:document.body.innerText.slice(0,5600),
-                links:[...document.querySelectorAll('a[href]')].map(x=>({text:x.innerText.trim().slice(0,120),href:x.href})).filter(x=>/certificat|download|verify|award|achievement|badge/i.test(x.text+' '+x.href)).slice(0,20),
-                buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length).map(x=>({text:x.innerText.trim().slice(0,120),disabled:x.disabled})).slice(-30)
-              }));
-              console.log('ISSUER_RESULT '+JSON.stringify(result));
-              if(!/score|certificat|results|correct/i.test(result.text)) throw Error('No assessment result rendered');
-            }finally{await b.close();}
-          })().catch(e=>{console.error('ISSUER_ERROR '+e.stack);process.exitCode=1});
-          JS
-          node inspect.cjs
+          mkdir -p issuer-credentials
+          FILE='issuer-credentials/Cyber_Army_AI_Security_cert-62a2673541b0.pdf'
+          curl --fail --location --silent --show-error --retry 2 --max-time 30 -H 'Accept: application/pdf' 'https://academy.cyberarmy.ai/api/certificate/cert-62a2673541b0/pdf' --output "$FILE"
+          MAGIC="$(head -c 5 "$FILE")"
+          SIZE="$(wc -c < "$FILE")"
+          if [ "$MAGIC" != '%PDF-' ] || [ "$SIZE" -lt 1000 ] || [ "$SIZE" -gt 3000000 ]; then echo 'Invalid original issuer PDF'; exit 1; fi
+          echo "ISSUER_PDF_VERIFIED size=$SIZE sha256=$(sha256sum "$FILE" | cut -d' ' -f1)"
+          if command -v pdftotext >/dev/null; then
+            pdftotext "$FILE" - | head -40 | sed 's/[[:cntrl:]]/ /g'
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "$FILE"
+          if ! git diff --cached --quiet; then
+            git commit -m 'Archive issuer original AI Security quiz achievement certificate'
+            git push origin HEAD:certzaky-public-probe-20261123
+          fi
