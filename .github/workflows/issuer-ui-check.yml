@@ -1,34 +1,46 @@
-name: Cyber Army - Archive Original PDF
+name: Web Application Security - Quiz Preview
 on:
   push:
     branches: [certzaky-public-probe-20261123]
     paths: ['.github/workflows/issuer-ui-check.yml']
 permissions:
-  contents: write
+  contents: read
 jobs:
-  download-issued:
+  preview:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - name: Download existing issuer-issued PDF and verify binary
-        shell: bash
+      - name: Read five visible questions normally; do not submit assessment
         run: |
           set -euo pipefail
-          mkdir -p issuer-credentials
-          FILE='issuer-credentials/Cyber_Army_AI_Security_cert-62a2673541b0.pdf'
-          curl --fail --location --silent --show-error --retry 2 --max-time 30 -H 'Accept: application/pdf' 'https://academy.cyberarmy.ai/api/certificate/cert-62a2673541b0/pdf' --output "$FILE"
-          MAGIC="$(head -c 5 "$FILE")"
-          SIZE="$(wc -c < "$FILE")"
-          if [ "$MAGIC" != '%PDF-' ] || [ "$SIZE" -lt 1000 ] || [ "$SIZE" -gt 3000000 ]; then echo 'Invalid original issuer PDF'; exit 1; fi
-          echo "ISSUER_PDF_VERIFIED size=$SIZE sha256=$(sha256sum "$FILE" | cut -d' ' -f1)"
-          if command -v pdftotext >/dev/null; then
-            pdftotext "$FILE" - | head -40 | sed 's/[[:cntrl:]]/ /g'
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- "$FILE"
-          if ! git diff --cached --quiet; then
-            git commit -m 'Archive issuer original AI Security quiz achievement certificate'
-            git push origin HEAD:certzaky-public-probe-20261123
-          fi
+          mkdir -p /tmp/issuer-browser && cd /tmp/issuer-browser
+          npm init -y --silent >/dev/null
+          npm install --no-save --silent playwright-core@1.56.1
+          cat > preview.cjs <<'JS'
+          const {chromium}=require('playwright-core');
+          (async()=>{
+            const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+            const page=await browser.newPage();
+            try {
+              const resp=await page.goto('https://academy.cyberarmy.ai/quiz/web-application-security',{waitUntil:'domcontentloaded',timeout:25000});
+              if(resp.status()!==200)throw Error('Unexpected response '+resp.status());
+              await page.getByRole('button',{name:/Start quiz/i}).click();
+              const questions=[];
+              for(let i=1;i<=5;i++){
+                const info=await page.evaluate(()=>({
+                   body:document.body.innerText.slice(0,1250),
+                   options:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length&&/^[A-D]\n/.test(x.innerText)).map(x=>x.innerText.trim())
+                }));
+                if(!info.body.includes('Question '+i+' of 5')) throw Error('Unexpected question number '+i);
+                questions.push({number:i,...info});
+                if(i<5){
+                  await page.getByRole('button',{name:/^A\s+/}).first().click();
+                  await page.getByRole('button',{name:'Next'}).click();
+                }
+              }
+              console.log('WEBAPP_PREVIEW '+JSON.stringify(questions));
+              console.log('NOT_SUBMITTED '+questions.length);
+            } finally {await browser.close();}
+          })().catch(e=>{console.error('WEBAPP_ERROR '+e.stack);process.exitCode=1;});
+          JS
+          node preview.cjs
