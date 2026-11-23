@@ -1,0 +1,43 @@
+name: Cyber Army - Five Topic Review
+on:
+  push:
+    branches: [certzaky-public-probe-20261123]
+    paths: ['.github/workflows/five-topic-review.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Study five curated assessment topics without submitting tests
+        run: |
+          set -euo pipefail
+          npm install --no-save --silent playwright-core@1.56.1
+          cat >/tmp/study.cjs <<'JS'
+          const {chromium}=require(process.cwd()+'/node_modules/playwright-core');
+          const slugs=['threat-intelligence','grc-fundamentals','iot-security','cloud-security','mobile-security'];
+          (async()=>{
+            const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+            for(const slug of slugs){
+              const p=await b.newPage();
+              try{
+                const r=await p.goto('https://academy.cyberarmy.ai/quiz/'+slug,{waitUntil:'domcontentloaded',timeout:25000});
+                if(r.status()!==200)throw Error('HTTP '+r.status());
+                await p.getByRole('button',{name:/Start quiz/i}).click();
+                for(let i=1;i<=5;i++){
+                  await p.waitForFunction(n=>document.body.innerText.includes('Question '+n+' of 5')&&document.body.innerText.includes(String.fromCharCode(10)+n+'.'),i,{timeout:13500});
+                  const q=await p.evaluate(()=>{const s=document.body.innerText;const q=s.slice(s.indexOf('Question '));const opts=[...document.querySelectorAll('button')].filter(x=>x.offsetParent!==null&&/^[ABCD]\s/.test(x.innerText.replaceAll('\n',' ').trim())).map(x=>x.innerText.replaceAll('\n',' ').trim());return {question:q.match(/\d+\.([^\n]+)/)?.[1]||'',options:opts};});
+                  if(q.options.length!==4)throw Error('Noncanonical answer set at '+i+' '+JSON.stringify(q));
+                  console.log('STUDY_ITEM '+JSON.stringify({slug,n:i,...q}));
+                  if(i<5){await p.getByRole('button',{name:/^A\s/i}).first().click();await p.getByRole('button',{name:'Next'}).click();}
+                }
+              }catch(e){console.log('STUDY_ERROR '+JSON.stringify({slug,error:String(e.message)}));}
+              finally{await p.close();}
+            }
+            await b.close();
+          })().catch(e=>{console.error(e.stack);process.exitCode=1});
+          JS
+          node --check /tmp/study.cjs
+          node /tmp/study.cjs
