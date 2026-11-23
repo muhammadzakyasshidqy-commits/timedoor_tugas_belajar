@@ -99,7 +99,7 @@ jobs:
                 if(Date.now()-start>105000)throw Error('Minimum time not satisfied');
                 await p.waitForTimeout(1600);
               }
-              await p.getByText('PASSED WITH DISTINCTION',{exact:true}).first().waitFor({timeout:14000});
+              await p.waitForFunction(()=>document.body.innerText.includes('PASSED WITH DISTINCTION')||document.body.innerText.includes('You did not pass'),null,{timeout:18000});
               const score=await p.evaluate(()=>document.body.innerText.slice(0,400));
               console.log('SERVER_SCORE '+JSON.stringify(redact(score)));
               if(!score.includes('100%'))throw Error('Score below expected');
