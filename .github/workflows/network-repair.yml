@@ -31,7 +31,7 @@ jobs:
               await p.getByRole('button',{name:/Start quiz/i}).click();
               const answers=['Filter network traffic','Redirect users to fake sites','SSH','Router','53'];
               for(let n=1;n<=5;n++){
-                await p.waitForFunction(n=>document.body.innerText.includes('Question '+n+' of 5'),n,{timeout:12000});
+                await p.waitForFunction(n=>document.body.innerText.includes('Question '+n+' of 5') && document.body.innerText.includes(String.fromCharCode(10)+n+'.'),n,{timeout:12000});
                 const candidates=await p.getByRole('button').all();
                 const targets=[];
                 for(const el of candidates){
