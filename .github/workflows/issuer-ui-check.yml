@@ -1,46 +1,74 @@
-name: Web Application Security - Final Question
+name: Web Application Security - Issuer PDF
 on:
   push:
     branches: [certzaky-public-probe-20261123]
     paths: ['.github/workflows/issuer-ui-check.yml']
 permissions:
-  contents: read
+  contents: write
 jobs:
-  preview:
+  certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Review final question after four normal quiz selections
+      - uses: actions/checkout@v4
+      - name: Answer free awareness quiz using normal UI, archive issuer PDF
         run: |
           set -euo pipefail
-          mkdir -p /tmp/issuer-browser && cd /tmp/issuer-browser
-          npm init -y --silent >/dev/null
           npm install --no-save --silent playwright-core@1.56.1
-          cat > preview.cjs <<'JS'
-          const {chromium}=require('playwright-core');
+          cat > /tmp/issue.cjs <<'JS'
+          const {chromium}=require(process.cwd()+'/node_modules/playwright-core');
+          const fs=require('fs'),crypto=require('crypto');
           (async()=>{
             const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
-            const page=await browser.newPage();
+            const page=await browser.newPage({acceptDownloads:true});
             try {
-              await page.goto('https://academy.cyberarmy.ai/quiz/web-application-security',{waitUntil:'domcontentloaded',timeout:25000});
+              const resp=await page.goto('https://academy.cyberarmy.ai/quiz/web-application-security',{waitUntil:'domcontentloaded',timeout:25000});
+              if(resp.status()!==200)throw Error('Unexpected response '+resp.status());
+              await page.getByPlaceholder('e.g. Alex Morgan').fill(['Muhammad','Zaky','Asshidqy'].join(' '));
+              await page.getByRole('button',{name:'Student',exact:true}).click();
               await page.getByRole('button',{name:/Start quiz/i}).click();
               await page.getByRole('button',{name:/Execute scripts in user browser/i}).click();
               await page.getByRole('button',{name:'Next'}).click();
-              await page.waitForTimeout(450);
+              await page.waitForTimeout(320);
               await page.getByRole('button',{name:/Direct object access without authorization/i}).click();
               await page.getByRole('button',{name:'Next'}).click();
-              await page.waitForTimeout(450);
+              await page.waitForTimeout(320);
               await page.getByRole('button',{name:/Improper input validation/i}).click();
               await page.getByRole('button',{name:'Next'}).click();
-              await page.waitForTimeout(450);
+              await page.waitForTimeout(320);
               await page.getByRole('button',{name:/User's authenticated session/i}).click();
               await page.getByRole('button',{name:'Next'}).click();
-              await page.waitForTimeout(450);
-              console.log('FINAL_WEBAPP_QUESTION '+JSON.stringify(await page.evaluate(()=>({
-                  text:document.body.innerText.slice(0,1600),
-                  buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length&&/^[A-D]\n/.test(x.innerText)).map(x=>x.innerText.trim())
-              }))));
-            } finally {await browser.close();}
-          })().catch(e=>{console.error('FINAL_WEBAPP_ERROR '+e.stack);process.exitCode=1;});
+              await page.waitForTimeout(320);
+              await page.getByRole('button',{name:/Force server to make requests/i}).click();
+              await page.getByRole('button',{name:'Submit Quiz'}).click();
+              await page.waitForTimeout(1700);
+              const result=await page.evaluate(()=>({
+                text:document.body.innerText,
+                links:[...document.querySelectorAll('a[href]')].map(x=>({text:x.innerText.trim(),url:x.href}))
+              }));
+              if(!/5\s*\/\s*5/.test(result.text)||!/100%\s*CORRECT/.test(result.text))throw Error('No verified perfect score');
+              const dl=result.links.find(x=>/Download certificate/i.test(x.text));
+              const verify=result.links.find(x=>x.text==='Verify');
+              if(!dl||!verify||!dl.url.startsWith('https://academy.cyberarmy.ai/api/certificate/'))throw Error('Issuer certificate links missing');
+              const id=verify.url.match(/\/certificate\/(cert-[a-z0-9]+)/)?.[1];
+              if(!id)throw Error('Missing verified issuer ID');
+              const pdfresp=await page.request.get(dl.url,{timeout:25000});
+              if(!pdfresp.ok())throw Error('Issuer PDF HTTP '+pdfresp.status());
+              const buf=await pdfresp.body();
+              if(buf.length<1000||buf.length>3000000||buf.subarray(0,5).toString()!=='%PDF-')throw Error('Invalid issuer PDF');
+              const path='issuer-credentials/Cyber_Army_Web_Application_Security_'+id+'.pdf';
+              fs.mkdirSync('issuer-credentials',{recursive:true});
+              fs.writeFileSync(path,buf);
+              const sha=crypto.createHash('sha256').update(buf).digest('hex');
+              console.log('ISSUER_WEBAPP_CERTIFICATE '+JSON.stringify({id,score:'5/5',percent:100,verify:verify.url,pdf:dl.url,bytes:buf.length,sha256:sha,path}));
+            }finally{await browser.close();}
+          })().catch(e=>{console.error('CERT_ISSUE_ERROR '+e.stack);process.exitCode=1});
           JS
-          node preview.cjs
+          node /tmp/issue.cjs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- issuer-credentials/
+          if ! git diff --cached --quiet; then
+            git commit -m 'Temporarily archive original issuer Web Application Security credential'
+            git push origin HEAD:certzaky-public-probe-20261123
+          fi
