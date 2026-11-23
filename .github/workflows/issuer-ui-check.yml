@@ -106,7 +106,7 @@ jobs:
               await p.getByPlaceholder('e.g. Priya Sharma').fill(name);
               await p.getByPlaceholder('you@company.com').fill(publicOwnerEmail);
               const submit=p.getByRole('button',{name:/Get & email my score card/i});
-              await submit.click();
+              console.log('CELEBRATION_OVERLAYS '+redact(JSON.stringify(await p.evaluate(()=>[...document.querySelectorAll('.soa-celebrate,.soa-unlock')].filter(x=>x.getClientRects().length>0).map(x=>({text:x.innerText.slice(0,850),buttons:[...x.querySelectorAll('button')].map(b=>({text:b.innerText.trim().slice(0,80),aria:b.getAttribute('aria-label')}))})))));\n              await submit.click({timeout:105000});
               await p.waitForTimeout(1900);
               let state=()=>p.evaluate(()=>({
                 url:location.href,
