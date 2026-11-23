@@ -1,4 +1,4 @@
-name: Science of Apps - First Answer UI Diagnostic
+name: Science of Apps - Cybersecurity Questions Review
 on:
   push:
     branches: [certzaky-public-probe-20261123]
@@ -8,41 +8,39 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 5
     steps:
-      - name: Diagnose accessible answer selection without submitting test
+      - name: Preview questions through visible quiz controls; do not submit
         run: |
           set -euo pipefail
           npm install --no-save --silent playwright-core@1.56.1
           cat > /tmp/inspect-soa.cjs <<'JS'
           const {chromium}=require(process.cwd()+'/node_modules/playwright-core');
           (async()=>{
-            const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
-            const p=await b.newPage();
+            const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+            const page=await browser.newPage();
             try{
-              await p.goto('https://scienceofapps.com/certification/cybersecurity-fundamentals/',{waitUntil:'domcontentloaded',timeout:25000});
-              await p.getByRole('button',{name:/Start the 10-minute test/i}).first().click();
-              const capture=()=>p.evaluate(()=>({
-                radios:[...document.querySelectorAll('input[type=radio]')].filter(x=>x.getClientRects().length).map(x=>({html:x.parentElement?.outerHTML.slice(0,700),name:x.name,checked:x.checked,disabled:x.disabled})),
-                next:[...document.querySelectorAll('button')].filter(x=>x.innerText.startsWith('Next')).map(x=>({html:x.outerHTML.slice(0,500),disabled:x.disabled})),
-                text:document.body.innerText.slice(0,600)
-              }));
-              console.log('BEFORE '+JSON.stringify(await capture()));
-              await p.locator('input[type=radio]:visible').nth(1).check();
-              await p.waitForTimeout(500);
-              console.log('AFTER_CHECK '+JSON.stringify(await capture()));
-              const btn=p.getByRole('button',{name:/^Next/}).first();
-              if(await btn.isDisabled()){
-                await p.getByText('Confidentiality, Integrity, Availability',{exact:true}).click();
-                await p.waitForTimeout(500);
+              await page.goto('https://scienceofapps.com/certification/cybersecurity-fundamentals/',{waitUntil:'domcontentloaded',timeout:25000});
+              await page.getByRole('button',{name:/Start the 10-minute test/i}).first().click();
+              await page.getByText('Question 1 of 10',{exact:true}).waitFor({timeout:12000});
+              const questions=[];
+              for(let i=1;i<=10;i++){
+                await page.getByText('Question '+i+' of 10',{exact:true}).waitFor({timeout:8000});
+                const state=await page.evaluate(()=>({
+                  text:document.body.innerText.slice(0,910),
+                  radios:[...document.querySelectorAll('input[type=radio][name^="q-"]')].filter(x=>x.getClientRects().length).map(x=>({value:x.value,label:x.closest('label')?.innerText||x.parentElement?.innerText||''}))
+                }));
+                questions.push({q:i,...state});
+                if(i<10){
+                  const radio=page.locator('input[type=radio][name^="q-"]:visible').first();
+                  await radio.check({timeout:6000});
+                  await page.getByRole('button',{name:/^Next/}).click({timeout:6000});
+                  await page.waitForTimeout(140);
+                }
               }
-              console.log('AFTER_CLICK '+JSON.stringify(await capture()));
-              if(await btn.isEnabled()){
-                await btn.click();
-                await p.waitForTimeout(700);
-                console.log('QUESTION_TWO '+JSON.stringify(await capture()));
-              }
-            }finally{await b.close();}
-          })().catch(e=>{console.error('DIAG_ERROR '+e.stack);process.exitCode=1});
+              console.log('SOA_CYBER_QUESTIONS '+JSON.stringify(questions));
+              console.log('NOT_SUBMITTED');
+            }finally{await browser.close();}
+          })().catch(e=>{console.error('SOA_PREVIEW_ERROR '+e.stack);process.exitCode=1});
           JS
           node /tmp/inspect-soa.cjs
