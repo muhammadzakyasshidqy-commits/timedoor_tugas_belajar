@@ -1,4 +1,4 @@
-name: Free Credential Issuer UI - Q2
+name: Free Credential Issuer UI - Q3
 on:
   push:
     branches: [certzaky-public-probe-20261123]
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: View question 2 through normal official UI
+      - name: View question 3 through normal official UI
         run: |
           set -euo pipefail
           mkdir -p /tmp/issuer-browser && cd /tmp/issuer-browser
@@ -26,12 +26,14 @@ jobs:
               await p.getByRole('button',{name:/Start quiz/i}).click();
               await p.getByRole('button',{name:/Crafting inputs that override a model/i}).click();
               await p.getByRole('button',{name:'Next'}).click();
+              await p.getByRole('button',{name:/Corrupting the training data to manipulate/i}).click();
+              await p.getByRole('button',{name:'Next'}).click();
               await p.waitForTimeout(350);
-              console.log('QUESTION_TWO '+JSON.stringify(await p.evaluate(()=>({
+              console.log('QUESTION_THREE '+JSON.stringify(await p.evaluate(()=>({
                 body:document.body.innerText.slice(0,1500),
                 options:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length&&/^[A-D]\n/.test(x.innerText)).map(x=>x.innerText.trim())
               }))));
             }finally{await b.close();}
-          })().catch(e=>{console.error('Q2_ERROR '+e.stack);process.exitCode=1});
+          })().catch(e=>{console.error('Q3_ERROR '+e.stack);process.exitCode=1});
           JS
           node inspect.cjs
