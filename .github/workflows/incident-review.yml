@@ -1,0 +1,38 @@
+name: Cyber Army - Incident Response Quiz Review
+on:
+  push:
+    branches: [certzaky-public-probe-20261123]
+    paths: ['.github/workflows/incident-review.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect official five-question learning assessment (no final submission)
+        run: |
+          set -euo pipefail
+          npm install --no-save --silent playwright-core@1.56.1
+          cat > /tmp/review.cjs <<'JS'
+          const {chromium}=require(process.cwd()+'/node_modules/playwright-core');
+          (async()=>{
+            const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+            try {
+              const p=await b.newPage();
+              const r=await p.goto('https://academy.cyberarmy.ai/quiz/incident-response',{waitUntil:'domcontentloaded',timeout:22000});
+              if(r.status()!==200)throw Error('HTTP '+r.status());
+              await p.getByRole('button',{name:/Start quiz/i}).click();
+              for(let i=1;i<=5;i++){
+                await p.waitForFunction(n=>document.body.innerText.includes('Question '+n+' of 5')&&document.body.innerText.includes(String.fromCharCode(10)+n+'.'),i,{timeout:14000});
+                const state=await p.evaluate(()=>{const btn=[...document.querySelectorAll('button')].filter(x=>x.offsetParent!==null);return {text:document.body.innerText.split('Question ')[1]?.slice(0,1250),opts:btn.filter(x=>/^[ABCD]\s/.test(x.innerText.trim().replaceAll('\n',' '))).map(x=>x.innerText.trim())}});
+                if(state.opts.length!==4)throw Error('Expected four answers at '+i);
+                console.log('LEARNING_Q '+JSON.stringify({n:i,text:state.text,options:state.opts}));
+                if(i<5){await p.getByRole('button',{name:/^A\s/i}).first().click();await p.getByRole('button',{name:'Next'}).click();}
+              }
+            }finally{await b.close();}
+          })().catch(e=>{console.error('REVIEW_ERROR '+e.stack);process.exitCode=1});
+          JS
+          node --check /tmp/review.cjs
+          node /tmp/review.cjs
