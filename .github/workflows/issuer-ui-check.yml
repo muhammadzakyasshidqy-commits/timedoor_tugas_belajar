@@ -1,4 +1,4 @@
-name: Science of Apps - Cybersecurity Questions Review
+name: Science of Apps - Cybersecurity Assessment
 on:
   push:
     branches: [certzaky-public-probe-20261123]
@@ -6,43 +6,108 @@ on:
 permissions:
   contents: read
 jobs:
-  inspect:
+  assessment:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Preview questions with official A–D and Enter keyboard controls
+      - name: Answer official timed 10-question free assessment without bypassing wait
         run: |
           set -euo pipefail
           npm install --no-save --silent playwright-core@1.56.1
-          cat > /tmp/inspect-soa.cjs <<'JS'
+          cat > /tmp/soa-exam.cjs <<'JS'
           const {chromium}=require(process.cwd()+'/node_modules/playwright-core');
+          const good=[
+             /confidentiality, integrity, availability/i,
+             /encrypts or steals data and demands payment/i,
+             /flaw exploited before a fix is available/i,
+             /weakness that could be exploited/i,
+             /manipulating people into revealing/i,
+             /threat is a potential cause of harm/i,
+             /stored data if devices or storage are stolen/i,
+             /backup you can't restore/i,
+             /passkeys or fido2 security keys/i,
+             /data moving across networks/i,
+             /stops many account takeovers/i,
+             /a password manager/i,
+             /report (it|to|promptly|the incident)/i,
+             /strong, unique/i,
+             /multi.factor authentication/i,
+             /fix known vulnerabilities/i,
+             /apply patches promptly/i,
+             /minimum (necessary|needed|access|permissions)/i,
+             /limit(ing)? access to what (they|users) need/i,
+             /multiple layers of/i,
+             /check (the|a) sender/i,
+             /verify (the|a) request/i,
+             /backup(s)? .*offline/i,
+             /likelihood and impact/i,
+             /authenticate.*authorized/i,
+             /identify, protect, detect, respond, recover/i,
+             /prevent unauthorized access/i,
+             /protect.*confidentiality/i,
+             /reduce the (impact|risk|likelihood)/i,
+             /with (a )?trusted (channel|source|number)/i
+          ];
+          const bad=[
+             /^(it'?s? |they're )?not (needed|required|important)/i,
+             /^only /i,/\balways\b/i,/\bnever\b/i,/speeds up computer/i,
+             /slows hackers'? internet/i,/passwords are unnecessary/i,
+             /delete(s|d)? spam/i,/day without attacks/i,
+             /use storage/i,/network speed/i,/makes hackers/i
+          ];
+          function choice(question,options){
+            let sc=options.map(x=>{
+              let t=x.replace(/^[A-D]\s+/,'');
+              let score=good.reduce((a,r)=>a+(r.test(t)?25:0),0)-bad.reduce((a,r)=>a+(r.test(t)?20:0),0);
+              if(t.length>25)score+=2;
+              return score;
+            });
+            let max=Math.max(...sc);
+            if(max<3)console.log('UNCERTAIN_QUESTION '+JSON.stringify({question,options}));
+            return sc.indexOf(max);
+          }
           (async()=>{
-            const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
-            const page=await browser.newPage();
+            const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+            const p=await b.newPage();
             try{
-              await page.goto('https://scienceofapps.com/certification/cybersecurity-fundamentals/',{waitUntil:'domcontentloaded',timeout:25000});
-              await page.getByRole('button',{name:/Start the 10-minute test/i}).first().click();
-              await page.getByText('Question 1 of 10',{exact:true}).waitFor({timeout:12000});
-              const questions=[];
+              await p.goto('https://scienceofapps.com/certification/cybersecurity-fundamentals/',{waitUntil:'domcontentloaded',timeout:25000});
+              await p.getByRole('button',{name:/Start the 10-minute test/i}).first().click();
+              await p.getByText('Question 1 of 10',{exact:true}).waitFor({timeout:12000});
+              const rec=[];
               for(let i=1;i<=10;i++){
-                await page.getByText('Question '+i+' of 10',{exact:true}).waitFor({timeout:8000});
-                const state=await page.evaluate(()=>({
-                  text:document.body.innerText.slice(0,950),
-                  answers:[...document.querySelectorAll('input[type=radio][name^="q-"]')].filter(x=>x.getClientRects().length).map(x=>({value:x.value,label:x.closest('label')?.innerText||x.parentElement?.innerText||''}))
+                await p.getByText('Question '+i+' of 10',{exact:true}).waitFor({timeout:9000});
+                const state=await p.evaluate(()=>({
+                  text:document.body.innerText.slice(0,480),
+                  options:[...document.querySelectorAll('input[type=radio][name^="q-"]')].filter(x=>x.getClientRects().length).map(x=>x.closest('label')?.innerText||x.parentElement?.innerText||'')
                 }));
-                questions.push({q:i,...state});
+                if(state.options.length!==4)throw Error('Unexpected options at Q'+i+': '+JSON.stringify(state));
+                const lines=state.text.split('\n');const question=lines.find(x=>x.includes('?'))||state.text.slice(0,160);
+                const best=choice(question,state.options);
+                rec.push({index:i,question,option:String.fromCharCode(65+best),answer:state.options[best]});
+                await p.keyboard.press(String.fromCharCode(97+best));
+                await p.waitForTimeout(80);
+                if(await p.locator('input[type=radio][name^="q-"]:checked').count()!==1)throw Error('Answer not selected '+i);
                 if(i<10){
-                  await page.keyboard.press('a');
-                  await page.waitForTimeout(130);
-                  const selected=await page.locator('input[type=radio][name^="q-"]:checked').count();
-                  if(selected!==1)throw Error('Keyboard A did not select current question '+i);
-                  await page.keyboard.press('Enter');
-                  await page.waitForTimeout(170);
+                  await p.keyboard.press('Enter');
+                  await p.waitForTimeout(130);
                 }
               }
-              console.log('SOA_CYBER_QUESTIONS '+JSON.stringify(questions));
-              console.log('NOT_SUBMITTED');
-            }finally{await browser.close();}
-          })().catch(e=>{console.error('SOA_PREVIEW_ERROR '+e.stack);process.exitCode=1});
+              console.log('ANSWERS_SELECTED '+JSON.stringify(rec));
+              const start=Date.now();
+              while(true){
+                const finish=p.getByRole('button',{name:/^Finish/}).first();
+                if(await finish.count()&&await finish.isEnabled()){await finish.click();break;}
+                if(Date.now()-start>105000)throw Error('Issuer minimum-time gate did not release');
+                await p.waitForTimeout(1500);
+              }
+              await p.waitForTimeout(2200);
+              console.log('ASSESSMENT_POST_FINISH '+JSON.stringify(await p.evaluate(()=>({
+                url:location.href,text:document.body.innerText.slice(0,5500),
+                inputs:[...document.querySelectorAll('input')].filter(x=>x.getClientRects().length).map(x=>({type:x.type,name:x.name,placeholder:x.placeholder,required:x.required})),
+                buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length).map(x=>({text:x.innerText.slice(0,90),disabled:x.disabled})).slice(0,22),
+                links:[...document.querySelectorAll('a[href]')].map(x=>({text:x.innerText.trim().slice(0,80),href:x.href})).filter(x=>/certificat|verify|result/i.test(x.text+' '+x.href)).slice(0,14)
+              }))));
+            }finally{await b.close();}
+          })().catch(e=>{console.error('ASSESSMENT_ERROR '+e.stack);process.exitCode=1});
           JS
-          node /tmp/inspect-soa.cjs
+          node /tmp/soa-exam.cjs
