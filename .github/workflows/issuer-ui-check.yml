@@ -1,4 +1,4 @@
-name: Cyber Army - 5 Short Cyber Quizzes Grounding
+name: Cyber Army - Five Topics Full Question Evidence
 on:
   push:
     branches: [certzaky-public-probe-20261123]
@@ -8,45 +8,37 @@ permissions:
 jobs:
   inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
-      - name: Read five public quizzes through normal UI without issuing certificates
+      - name: Collect visible 5-question texts from normal browser flow, no certificate submission
         run: |
           set -euo pipefail
           npm install --no-save --silent playwright-core@1.56.1
-          cat > /tmp/quiz-preview.cjs <<'JS'
+          cat > /tmp/q.cjs <<'JS'
           const {chromium}=require(process.cwd()+'/node_modules/playwright-core');
           (async()=>{
             const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
-            const topics=['cloud-security','incident-response','zero-trust-security','data-privacy','network-security'];
-            try{
-              for(const slug of topics){
-                const page=await browser.newPage();
-                const qs=[];
-                try{
-                  const res=await page.goto('https://academy.cyberarmy.ai/quiz/'+slug,{waitUntil:'domcontentloaded',timeout:22000});
-                  if(res.status()!==200)throw Error('Non-200 response '+res.status());
-                  await page.getByRole('button',{name:/Start quiz/i}).click({timeout:12000});
-                  for(let i=1;i<=5;i++){
-                    await page.getByText('Question '+i+' of 5',{exact:false}).first().waitFor({timeout:9000});
-                    const data=await page.evaluate(()=>({
-                      text:document.body.innerText.split('CYBER ARMY PRODUCTS')[0].slice(0,850),
-                      options:[...document.querySelectorAll('button')].filter(el=>el.getClientRects().length&&/^[A-D]\n/.test(el.innerText)).map(el=>el.innerText.trim().slice(0,280))
-                    }));
-                    if(data.options.length!==4)throw Error('Expected 4 options Q'+i);
-                    qs.push({q:i,...data});
-                    if(i<5){
-                      const option=page.getByRole('button',{name:/^A\s/}).first();
-                      await option.click({timeout:8000});
-                      await page.getByRole('button',{name:'Next'}).click({timeout:8000});
-                      await page.waitForTimeout(125);
-                    }
-                  }
-                  console.log('TOPIC_QUIZ '+JSON.stringify({slug,questions:qs}));
-                }catch(e){console.log('TOPIC_FAIL '+JSON.stringify({slug,error:String(e.message),partial_questions:qs}));}
-                await page.close();
-              }
-            }finally{await browser.close();}
-          })().catch(e=>{console.error('PROBE_FATAL '+e.stack);process.exitCode=1;});
+            for(const slug of ['cloud-security','incident-response','zero-trust-security','data-privacy','network-security']){
+              const page=await browser.newPage();
+              const qs=[];
+              try{
+                await page.goto('https://academy.cyberarmy.ai/quiz/'+slug,{waitUntil:'domcontentloaded',timeout:24000});
+                await page.getByRole('button',{name:/Start quiz/i}).click();
+                for(let i=1;i<=5;i++){
+                  await page.waitForFunction(n=>document.body.innerText.includes('Question '+n+' of 5')&&document.body.innerText.includes(String.fromCharCode(10)+n+'.'),i,{timeout:9000});
+                  const d=await page.evaluate(()=>({
+                    question:document.body.innerText.split('Question ')[1]?.split('Previous')[0]?.slice(0,640),
+                    options:[...document.querySelectorAll('button')].filter(b=>b.getClientRects().length&&/^[A-D]\n/.test(b.innerText)).map(b=>b.innerText.trim())
+                  }));
+                  if(d.options.length!==4)throw Error('Missing options at '+i);
+                  qs.push({n:i,...d});
+                  if(i<5){await page.getByRole('button',{name:/^A\s/}).first().click();await page.getByRole('button',{name:'Next'}).click();}
+                }
+                console.log('FULL_QUIZ '+JSON.stringify({slug,questions:qs}));
+              }catch(e){console.log('FULL_QUIZ_ERROR '+JSON.stringify({slug,error:String(e),partial:qs}));}
+              await page.close();
+            }
+            await browser.close();
+          })().catch(e=>{console.error('FULL_FATAL '+e.stack);process.exitCode=1;});
           JS
-          node /tmp/quiz-preview.cjs
+          node /tmp/q.cjs
