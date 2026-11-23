@@ -1,75 +1,44 @@
-name: Web Application Security - Issuer PDF
+name: Science of Apps - Assessment UI Grounding
 on:
   push:
     branches: [certzaky-public-probe-20261123]
     paths: ['.github/workflows/issuer-ui-check.yml']
 permissions:
-  contents: write
+  contents: read
 jobs:
-  certify:
+  inspect:
     runs-on: ubuntu-latest
-    timeout-minutes: 6
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - name: Answer free awareness quiz using normal UI, archive issuer PDF
+      - name: Inspect two free server-scored certification interfaces; read only
         run: |
           set -euo pipefail
           npm install --no-save --silent playwright-core@1.56.1
-          cat > /tmp/issue.cjs <<'JS'
+          cat > /tmp/inspect-soa.cjs <<'JS'
           const {chromium}=require(process.cwd()+'/node_modules/playwright-core');
-          const fs=require('fs'),crypto=require('crypto');
           (async()=>{
             const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
-            const page=await browser.newPage({acceptDownloads:true});
-            try {
-              const resp=await page.goto('https://academy.cyberarmy.ai/quiz/web-application-security',{waitUntil:'domcontentloaded',timeout:25000});
-              if(resp.status()!==200)throw Error('Unexpected response '+resp.status());
-              await page.getByPlaceholder('e.g. Alex Morgan').fill(['Muhammad','Zaky','Asshidqy'].join(' '));
-              await page.getByRole('button',{name:'Student',exact:true}).click();
-              await page.getByRole('button',{name:/Start quiz/i}).click();
-              await page.getByRole('button',{name:/Execute scripts in user browser/i}).click();
-              await page.getByRole('button',{name:'Next'}).click();
-              await page.waitForTimeout(320);
-              await page.getByRole('button',{name:/Direct object access without authorization/i}).click();
-              await page.getByRole('button',{name:'Next'}).click();
-              await page.waitForTimeout(320);
-              await page.getByRole('button',{name:/Improper input validation/i}).click();
-              await page.getByRole('button',{name:'Next'}).click();
-              await page.waitForTimeout(320);
-              await page.getByRole('button',{name:/User's authenticated session/i}).click();
-              await page.getByRole('button',{name:'Next'}).click();
-              await page.waitForTimeout(320);
-              await page.getByRole('button',{name:/Force server to make requests/i}).click();
-              await page.getByRole('button',{name:'Submit Quiz'}).click();
-              await page.waitForTimeout(4500);
-              const result=await page.evaluate(()=>({
-                text:document.body.innerText,
-                links:[...document.querySelectorAll('a[href]')].map(x=>({text:x.innerText.trim(),url:x.href}))
-              }));
-              console.log('WEBAPP_RESULT_DIAG '+JSON.stringify({text:result.text.slice(0,3600),links:result.links}).slice(0,6200));
-              if(!/5\s*\/\s*5/.test(result.text)||!/100%\s*CORRECT/.test(result.text))throw Error('No verified perfect score');
-              const dl=result.links.find(x=>x.url.includes('/api/certificate/'));
-              const verify=result.links.find(x=>x.url.includes('/certificate/cert-'));
-              if(!dl||!verify||!dl.url.startsWith('https://academy.cyberarmy.ai/api/certificate/'))throw Error('Issuer certificate links missing');
-              const id=verify.url.match(/\/certificate\/(cert-[a-z0-9]+)/)?.[1];
-              if(!id)throw Error('Missing verified issuer ID');
-              const pdfresp=await page.request.get(dl.url,{timeout:25000});
-              if(!pdfresp.ok())throw Error('Issuer PDF HTTP '+pdfresp.status());
-              const buf=await pdfresp.body();
-              if(buf.length<1000||buf.length>3000000||buf.subarray(0,5).toString()!=='%PDF-')throw Error('Invalid issuer PDF');
-              const path='issuer-credentials/Cyber_Army_Web_Application_Security_'+id+'.pdf';
-              fs.mkdirSync('issuer-credentials',{recursive:true});
-              fs.writeFileSync(path,buf);
-              const sha=crypto.createHash('sha256').update(buf).digest('hex');
-              console.log('ISSUER_WEBAPP_CERTIFICATE '+JSON.stringify({id,score:'5/5',percent:100,verify:verify.url,pdf:dl.url,bytes:buf.length,sha256:sha,path}));
-            }finally{await browser.close();}
-          })().catch(e=>{console.error('CERT_ISSUE_ERROR '+e.stack);process.exitCode=1});
+            for(const url of ['https://scienceofapps.com/certification/cybersecurity-fundamentals/','https://scienceofapps.com/certification/ai-workflow-automation/']){
+              const p=await browser.newPage();
+              try{
+                const res=await p.goto(url,{waitUntil:'domcontentloaded',timeout:25000});
+                await p.waitForTimeout(700);
+                const state=()=>p.evaluate(()=>({
+                  url:location.href,title:document.title,text:document.body.innerText.slice(0,2600),
+                  buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length>0).map(x=>({text:x.innerText.slice(0,150),type:x.type})).slice(0,28),
+                  inputs:[...document.querySelectorAll('input')].filter(x=>x.getClientRects().length>0).map(x=>({type:x.type,name:x.name,placeholder:x.placeholder})).slice(0,22)
+                }));
+                console.log('SOA_LANDING '+JSON.stringify({http:res.status(),...(await state())}));
+                const start=p.getByRole('button',{name:/Start the .* test/i}).first();
+                if(await start.count()){
+                  await start.click({timeout:12000});
+                  await p.waitForTimeout(600);
+                  console.log('SOA_STARTED '+JSON.stringify(await state()));
+                }
+              }catch(e){console.log('SOA_ERROR '+JSON.stringify({url,error:String(e.message)}));}
+              await p.close();
+            }
+            await browser.close();
+          })().catch(e=>{console.error('SYSTEM_ERROR '+e.stack);process.exitCode=1});
           JS
-          node /tmp/issue.cjs
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- issuer-credentials/
-          if ! git diff --cached --quiet; then
-            git commit -m 'Temporarily archive original issuer Web Application Security credential'
-            git push origin HEAD:certzaky-public-probe-20261123
-          fi
+          node /tmp/inspect-soa.cjs
