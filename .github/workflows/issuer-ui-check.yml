@@ -1,0 +1,52 @@
+name: Free Credential Issuer UI - Read Only
+on:
+  push:
+    paths:
+      - '.github/workflows/issuer-ui-check.yml'
+    branches: [certzaky-public-probe-20261123]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-issuer-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Inspect real public issuer UI without submitting exams or bypassing controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/sz-browser && cd /tmp/sz-browser
+          npm init -y --silent >/dev/null
+          npm install --no-save --silent playwright-core@1.56.1
+          cat > inspect.cjs <<'JS'
+          const {chromium}=require('playwright-core');
+          const fs=require('fs');
+          (async ()=>{
+            const paths=['/usr/bin/google-chrome','/usr/bin/google-chrome-stable','/usr/bin/chromium','/usr/bin/chromium-browser'];
+            const exe=paths.find(x=>fs.existsSync(x));
+            if(!exe)throw Error('No supported browser executable installed');
+            console.log('browser_executable='+exe);
+            const browser=await chromium.launch({executablePath:exe,headless:true,args:['--no-sandbox']});
+            try{
+              for(const u of ['https://academy.cyberarmy.ai/quiz/ai-security','https://csmic.ca/free-training']){
+                const page=await browser.newPage();
+                try{
+                  const response=await page.goto(u,{waitUntil:'domcontentloaded',timeout:30000});
+                  await page.waitForTimeout(2200);
+                  const state=await page.evaluate(()=>({
+                    title:document.title,url:location.href,
+                    heading:[...document.querySelectorAll('h1,h2,h3')].map(x=>x.innerText.trim()).filter(Boolean).slice(0,25),
+                    buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length>0).map(x=>({text:x.innerText.trim().slice(0,100),type:x.type})).slice(0,35),
+                    inputs:[...document.querySelectorAll('input')].map(x=>({type:x.type,name:x.name,placeholder:x.placeholder})).slice(0,20),
+                    links:[...document.querySelectorAll('a')].filter(x=>x.getClientRects().length>0).map(x=>({text:x.innerText.trim().slice(0,60),href:x.getAttribute('href')})).filter(x=>/quiz|start|train|security|assessment/i.test(x.text+' '+x.href)).slice(0,25),
+                    text:document.body?.innerText.slice(0,4500)
+                  }));
+                  console.log('PAGE '+JSON.stringify({httpStatus:response?.status(),...state}));
+                } catch(e){console.log('PAGE_ERROR '+JSON.stringify({url:u,error:String(e.message)}));}
+                await page.close();
+              }
+            }finally{await browser.close();}
+          })().catch(e=>{console.error('ERROR',e.stack);process.exitCode=1;});
+          JS
+          node inspect.cjs
