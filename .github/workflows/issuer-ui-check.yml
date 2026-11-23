@@ -1,10 +1,8 @@
-name: Free Credential Issuer UI - Quiz Screen
+name: Free Credential Issuer UI - Q2
 on:
   push:
     branches: [certzaky-public-probe-20261123]
-    paths:
-      - '.github/workflows/issuer-ui-check.yml'
-  workflow_dispatch:
+    paths: ['.github/workflows/issuer-ui-check.yml']
 permissions:
   contents: read
 jobs:
@@ -12,31 +10,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: View first question through official UI without answering
-        shell: bash
+      - name: View question 2 through normal official UI
         run: |
           set -euo pipefail
           mkdir -p /tmp/issuer-browser && cd /tmp/issuer-browser
           npm init -y --silent >/dev/null
           npm install --no-save --silent playwright-core@1.56.1
           cat > inspect.cjs <<'JS'
-          const { chromium } = require('playwright-core');
+          const {chromium}=require('playwright-core');
           (async()=>{
             const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
             const p=await b.newPage();
-            try {
-              const resp=await p.goto('https://academy.cyberarmy.ai/quiz/ai-security',{waitUntil:'domcontentloaded',timeout:25000});
-              if(resp.status()!==200)throw Error('Unexpected issuer status '+resp.status());
-              await p.getByRole('button',{name:/Start quiz/i}).click({timeout:13000});
-              await p.waitForTimeout(1700);
-              const ui=await p.evaluate(()=>({
-                 url:location.href,
-                 text:document.body?.innerText.slice(0,5200),
-                 buttons:[...document.querySelectorAll('button')].filter(el=>el.getClientRects().length).map(x=>({text:x.innerText.trim().slice(0,150),disabled:x.disabled})).slice(0,30),
-                 inputs:[...document.querySelectorAll('input')].filter(el=>el.getClientRects().length).map(x=>({type:x.type,name:x.name,value:x.value,aria:x.getAttribute('aria-label')})).slice(0,25)
-              }));
-              console.log('QUIZ_UI '+JSON.stringify(ui));
-            } finally {await b.close();}
-          })().catch(e=>{console.error('QUIZ_ERROR '+e.stack);process.exitCode=1;});
+            try{
+              await p.goto('https://academy.cyberarmy.ai/quiz/ai-security',{waitUntil:'domcontentloaded',timeout:25000});
+              await p.getByRole('button',{name:/Start quiz/i}).click();
+              await p.getByRole('button',{name:/Crafting inputs that override a model/i}).click();
+              await p.getByRole('button',{name:'Next'}).click();
+              await p.waitForTimeout(350);
+              console.log('QUESTION_TWO '+JSON.stringify(await p.evaluate(()=>({
+                body:document.body.innerText.slice(0,1500),
+                options:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length&&/^[A-D]\n/.test(x.innerText)).map(x=>x.innerText.trim())
+              }))));
+            }finally{await b.close();}
+          })().catch(e=>{console.error('Q2_ERROR '+e.stack);process.exitCode=1});
           JS
           node inspect.cjs
