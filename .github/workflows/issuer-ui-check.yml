@@ -1,4 +1,4 @@
-name: Free Credential Issuer UI - Q5
+name: Free Credential Issuer - AI Security Outcome
 on:
   push:
     branches: [certzaky-public-probe-20261123]
@@ -6,11 +6,11 @@ on:
 permissions:
   contents: read
 jobs:
-  quiz-screen:
+  quiz-outcome:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: View final cybersecurity quiz question
+      - name: Take free Cyber Army awareness quiz using official interface; no bypass
         run: |
           set -euo pipefail
           mkdir -p /tmp/issuer-browser && cd /tmp/issuer-browser
@@ -20,9 +20,11 @@ jobs:
           const {chromium}=require('playwright-core');
           (async()=>{
             const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
-            const p=await b.newPage();
+            const p=await b.newPage({acceptDownloads:true});
             try{
               await p.goto('https://academy.cyberarmy.ai/quiz/ai-security',{waitUntil:'domcontentloaded',timeout:25000});
+              await p.getByPlaceholder('e.g. Alex Morgan').fill(['Muhammad','Zaky','Asshidqy'].join(' '));
+              await p.getByRole('button',{name:'Student',exact:true}).click();
               await p.getByRole('button',{name:/Start quiz/i}).click();
               await p.getByRole('button',{name:/Crafting inputs that override a model/i}).click();
               await p.getByRole('button',{name:'Next'}).click();
@@ -32,12 +34,19 @@ jobs:
               await p.getByRole('button',{name:'Next'}).click();
               await p.getByRole('button',{name:/Small, often imperceptible changes/i}).click();
               await p.getByRole('button',{name:'Next'}).click();
-              await p.waitForTimeout(350);
-              console.log('QUESTION_FIVE '+JSON.stringify(await p.evaluate(()=>({
-                body:document.body.innerText.slice(0,1600),
-                buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length).map(x=>({text:x.innerText.trim().slice(0,220),disabled:x.disabled})).slice(-14)
-              }))));
+              await p.getByRole('button',{name:/By implementing robust input validation/i}).click();
+              await p.getByRole('button',{name:'Submit Quiz'}).click();
+              await p.waitForTimeout(2200);
+              const result=await p.evaluate(()=>({
+                title:document.title,
+                url:location.href,
+                text:document.body.innerText.slice(0,5600),
+                links:[...document.querySelectorAll('a[href]')].map(x=>({text:x.innerText.trim().slice(0,120),href:x.href})).filter(x=>/certificat|download|verify|award|achievement|badge/i.test(x.text+' '+x.href)).slice(0,20),
+                buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length).map(x=>({text:x.innerText.trim().slice(0,120),disabled:x.disabled})).slice(-30)
+              }));
+              console.log('ISSUER_RESULT '+JSON.stringify(result));
+              if(!/score|certificat|results|correct/i.test(result.text)) throw Error('No assessment result rendered');
             }finally{await b.close();}
-          })().catch(e=>{console.error('Q5_ERROR '+e.stack);process.exitCode=1});
+          })().catch(e=>{console.error('ISSUER_ERROR '+e.stack);process.exitCode=1});
           JS
           node inspect.cjs
