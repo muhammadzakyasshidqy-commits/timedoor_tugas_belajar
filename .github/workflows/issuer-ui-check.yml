@@ -1,4 +1,4 @@
-name: Science of Apps - Assessment UI Grounding
+name: Science of Apps - Cybersecurity Questions Review
 on:
   push:
     branches: [certzaky-public-probe-20261123]
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Inspect two free server-scored certification interfaces; read only
+      - name: Read public quiz questions without submitting a result
         run: |
           set -euo pipefail
           npm install --no-save --silent playwright-core@1.56.1
@@ -18,27 +18,26 @@ jobs:
           const {chromium}=require(process.cwd()+'/node_modules/playwright-core');
           (async()=>{
             const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
-            for(const url of ['https://scienceofapps.com/certification/cybersecurity-fundamentals/','https://scienceofapps.com/certification/ai-workflow-automation/']){
-              const p=await browser.newPage();
-              try{
-                const res=await p.goto(url,{waitUntil:'domcontentloaded',timeout:25000});
-                await p.waitForTimeout(700);
-                const state=()=>p.evaluate(()=>({
-                  url:location.href,title:document.title,text:document.body.innerText.slice(0,2600),
-                  buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length>0).map(x=>({text:x.innerText.slice(0,150),type:x.type})).slice(0,28),
-                  inputs:[...document.querySelectorAll('input')].filter(x=>x.getClientRects().length>0).map(x=>({type:x.type,name:x.name,placeholder:x.placeholder})).slice(0,22)
+            const page=await browser.newPage();
+            try{
+              await page.goto('https://scienceofapps.com/certification/cybersecurity-fundamentals/',{waitUntil:'domcontentloaded',timeout:25000});
+              await page.getByRole('button',{name:/Start the 10-minute test/i}).first().click();
+              const questions=[];
+              for(let i=1;i<=10;i++){
+                const state=await page.evaluate(()=>({
+                  text:document.body.innerText.slice(0,950),
+                  radios:[...document.querySelectorAll('input[type=radio]')].filter(x=>x.getClientRects().length).map(x=>({value:x.value,label:x.closest('label')?.innerText||x.parentElement?.innerText||''}))
                 }));
-                console.log('SOA_LANDING '+JSON.stringify({http:res.status(),...(await state())}));
-                const start=p.getByRole('button',{name:/Start the .* test/i}).first();
-                if(await start.count()){
-                  await start.click({timeout:12000});
-                  await p.waitForTimeout(600);
-                  console.log('SOA_STARTED '+JSON.stringify(await state()));
+                questions.push({q:i,...state});
+                if(i<10){
+                  await page.locator('input[type=radio]:visible').first().check();
+                  await page.getByRole('button',{name:/^Next/}).click();
+                  await page.waitForTimeout(170);
                 }
-              }catch(e){console.log('SOA_ERROR '+JSON.stringify({url,error:String(e.message)}));}
-              await p.close();
-            }
-            await browser.close();
-          })().catch(e=>{console.error('SYSTEM_ERROR '+e.stack);process.exitCode=1});
+              }
+              console.log('SOA_CYBER_QUESTIONS '+JSON.stringify(questions));
+              console.log('NOT_SUBMITTED_AND_NO_CERTIFICATE_ISSUED');
+            }finally{await browser.close();}
+          })().catch(e=>{console.error('SOA_PREVIEW_ERROR '+e.stack);process.exitCode=1});
           JS
           node /tmp/inspect-soa.cjs
