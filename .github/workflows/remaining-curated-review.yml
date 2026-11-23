@@ -1,0 +1,45 @@
+name: Cyber Army - Remaining Curated Quiz Review
+on:
+  push:
+    branches: [certzaky-public-probe-20261123]
+    paths: ['.github/workflows/remaining-curated-review.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check unsubmitted assessments through official browser
+        run: |
+          set -euo pipefail
+          npm install --no-save --silent playwright-core@1.56.1
+          cat > /tmp/review.cjs <<'JS'
+          const {chromium}=require(process.cwd()+'/node_modules/playwright-core');
+          (async()=>{
+            const b=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+            for(const slug of ['claude-code','endpoint-security','mobile-app-security']){
+              const p=await b.newPage();
+              try{
+                const r=await p.goto('https://academy.cyberarmy.ai/quiz/'+slug,{waitUntil:'domcontentloaded',timeout:26000});
+                console.log('START_INFO '+JSON.stringify({slug,http:r.status(),url:p.url(),intro:(await p.locator('body').innerText()).slice(0,650)}));
+                const start=p.getByRole('button',{name:/Start quiz/i});
+                if(await start.count()!==1)throw Error('No start button');
+                await start.click();
+                for(let i=1;i<=5;i++){
+                  await p.waitForFunction(n=>document.body.innerText.includes('Question '+n+' of 5'),i,{timeout:14000});
+                  await p.waitForTimeout(350);
+                  const q=await p.evaluate(()=>{const s=document.body.innerText;const q=s.slice(s.indexOf('Question '));const opts=[...document.querySelectorAll('button')].filter(x=>x.offsetParent!==null&&/^[ABCD]\s|^(True|False)$/i.test(x.innerText.replaceAll('\n',' ').trim())).map(x=>x.innerText.replaceAll('\n',' ').trim());return {question:q.match(/\d+\.([^\n]+)/)?.[1]||q.slice(0,130),options:opts,context:q.slice(0,340)};});
+                  console.log('REVIEW_ITEM '+JSON.stringify({slug,n:i,...q}));
+                  if(!q.options.length)throw Error('No answer choices at '+i);
+                  if(i<5){const btn=p.getByRole('button',{name:q.options[0].replace(/^[ABCD]\s/,'').trim(),exact:false});if(await btn.count()!==1)throw Error('Option not unique '+i);await btn.click();await p.getByRole('button',{name:'Next'}).click();}
+                }
+              }catch(e){console.log('REVIEW_ERROR '+JSON.stringify({slug,url:p.url(),error:String(e.message),body:(await p.locator('body').innerText()).slice(0,800)}));}
+              finally{await p.close();}
+            }
+            await b.close();
+          })().catch(e=>{console.error(e.stack);process.exitCode=1});
+          JS
+          node --check /tmp/review.cjs
+          node /tmp/review.cjs
