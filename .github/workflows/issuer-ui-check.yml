@@ -1,4 +1,4 @@
-name: Free Credential Issuer UI - Q4
+name: Free Credential Issuer UI - Q5
 on:
   push:
     branches: [certzaky-public-probe-20261123]
@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: View question 4 via normal UI
+      - name: View final cybersecurity quiz question
         run: |
           set -euo pipefail
           mkdir -p /tmp/issuer-browser && cd /tmp/issuer-browser
@@ -30,12 +30,14 @@ jobs:
               await p.getByRole('button',{name:'Next'}).click();
               await p.getByRole('button',{name:/Extracting sensitive training data from a trained model/i}).click();
               await p.getByRole('button',{name:'Next'}).click();
+              await p.getByRole('button',{name:/Small, often imperceptible changes/i}).click();
+              await p.getByRole('button',{name:'Next'}).click();
               await p.waitForTimeout(350);
-              console.log('QUESTION_FOUR '+JSON.stringify(await p.evaluate(()=>({
-                body:document.body.innerText.slice(0,1700),
-                options:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length&&/^[A-D]\n/.test(x.innerText)).map(x=>x.innerText.trim())
+              console.log('QUESTION_FIVE '+JSON.stringify(await p.evaluate(()=>({
+                body:document.body.innerText.slice(0,1600),
+                buttons:[...document.querySelectorAll('button')].filter(x=>x.getClientRects().length).map(x=>({text:x.innerText.trim().slice(0,220),disabled:x.disabled})).slice(-14)
               }))));
             }finally{await b.close();}
-          })().catch(e=>{console.error('Q4_ERROR '+e.stack);process.exitCode=1});
+          })().catch(e=>{console.error('Q5_ERROR '+e.stack);process.exitCode=1});
           JS
           node inspect.cjs
