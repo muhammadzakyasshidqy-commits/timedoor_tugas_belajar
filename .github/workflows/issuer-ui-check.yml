@@ -45,6 +45,9 @@ jobs:
             /likelihood and impact/i,
             /protect confidentiality/i,
             /identify, protect, detect, respond, recover/i,
+            /govern, identify, protect, detect, respond, recover/i,
+            /setting and overseeing cybersecurity strategy, roles and policy/i,
+            /3 copies, on 2 different media, with 1 offsite/i,
             /trusted channel/i,
             /verify (the|a) request/i,
             /promptly report/i,
@@ -96,7 +99,7 @@ jobs:
                 if(Date.now()-start>105000)throw Error('Minimum time not satisfied');
                 await p.waitForTimeout(1600);
               }
-              await p.getByText('PASSED WITH DISTINCTION').waitFor({timeout:14000});
+              await p.getByText('PASSED WITH DISTINCTION',{exact:true}).first().waitFor({timeout:14000});
               const score=await p.evaluate(()=>document.body.innerText.slice(0,400));
               console.log('SERVER_SCORE '+JSON.stringify(redact(score)));
               if(!score.includes('100%'))throw Error('Score below expected');
